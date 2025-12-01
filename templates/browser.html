@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="flex flex-col w-full h-full bg-white" x-data="{ viewMode: localStorage.getItem('viewMode') || 'list' }">
+
+        <div class="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white shrink-0">
+            <div class="flex items-center text-sm text-gray-600 overflow-hidden whitespace-nowrap mr-4">
+                <a href="{{ url_for('browser') }}" class="hover:text-blue-600 font-semibold"><i
+                        class="fa-solid fa-home"></i></a>
+                {% for crumb in breadcrumbs %}
+                    <span class="mx-2 text-gray-400">/</span>
+                    <a href="{{ crumb.url }}"
+                       class="hover:text-blue-600 hover:underline truncate max-w-[150px]">{{ crumb.name }}</a>
+                {% endfor %}
+            </div>
+
+            <div class="flex items-center gap-3">
+                {% if bucket %}
+                    <button onclick="openFolderModal()"
+                            class="text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-md transition border border-gray-300 whitespace-nowrap flex items-center">
+                        <i class="fa-solid fa-folder-plus mr-1.5 text-yellow-600"></i> 新建文件夹
+                    </button>
+
+                    <form id="uploadForm" action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data"
+                          class="flex items-center">
+                        <input type="hidden" name="bucket_name" value="{{ bucket }}">
+                        <input type="hidden" name="prefix" value="{{ prefix }}">
+                        <label for="file-upload"
+                               class="cursor-pointer text-sm bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded-md transition shadow-sm flex items-center whitespace-nowrap">
+                            <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i> 上传文件
+                        </label>
+                        <input id="file-upload" name="file" type="file" class="hidden"
+                               onchange="document.getElementById('uploadForm').submit();">
+                    </form>
+
+                    <div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+                    <a href="{{ url_for('download_all', bucket_name=bucket, prefix=prefix) }}"
+                       class="text-sm bg-green-50 text-green-600 hover:bg-green-100 px-3 py-1.5 rounded-md transition border border-green-200 whitespace-nowrap"
+                       title="下载当前目录全部文件">
+                        <i class="fa-solid fa-download"></i>
+                    </a>
+                {% endif %}
+
+                <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    <button onclick="setView('list')" id="btn-list"
+                            class="px-2 py-1 rounded text-gray-500 hover:text-blue-600 transition"><i
+                            class="fa-solid fa-list"></i></button>
+                    <button onclick="setView('grid')" id="btn-grid"
+                            class="px-2 py-1 rounded text-gray-500 hover:text-blue-600 transition"><i
+                            class="fa-solid fa-border-all"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="file-container" class="flex-1 overflow-y-auto p-6 bg-slate-50 relative">
+
+            {% if bucket and prefix %}
+                <div class="mb-4">
+                    <a href="../"
+                       class="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow transition">
+                        <i class="fa-solid fa-level-up-alt"></i> 返回上一级
+                    </a>
+                </div>
+            {% endif %}
+
+            <div id="grid-wrapper" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
+                {% for b in data.buckets %}
+                    <div class="file-item bucket-item group relative bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 transition cursor-pointer flex flex-col items-center justify-center h-48"
+                         onclick="window.location.href='{{ url_for('browser', bucket_name=b.name) }}'">
+                        <div class="icon-area text-5xl text-yellow-500 mb-3 drop-shadow-sm transition-all duration-200">
+                            <i class="fa-solid fa-database"></i>
+                        </div>
+                        <div class="text-area text-sm font-medium text-gray-700 text-center truncate w-full px-2">
+                            {{ b.name }}
+                        </div>
+                        <div class="grid-only-text text-xs text-gray-400 mt-1">Bucket</div>
+                    </div>
+                {% endfor %}
+
+                {% for folder in data.folders %}
+                    <div class="file-item group relative bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 transition cursor-pointer flex flex-col items-center justify-center h-48"
+                         ondblclick="window.location.href='{{ url_for('browser', bucket_name=bucket, prefix=folder) }}'">
+                        <div class="icon-area text-6xl text-blue-300 mb-3 group-hover:text-blue-400 transition drop-shadow-sm">
+                            <i class="fa-solid fa-folder"></i>
+                        </div>
+                        <div class="text-area text-sm font-medium text-gray-700 text-center truncate w-full px-2">
+                            {{ folder.strip('/').split('/')[-1] }}
+                        </div>
+                    </div>
+                {% endfor %}
+
+                {% for file in data.objects %}
+                    <div class="file-item object-item group relative bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 transition flex flex-col h-48 overflow-hidden cursor-pointer"
+                         ondblclick="window.location.href='{{ url_for('download_file', bucket_name=bucket, filepath=file.path) }}'">
+                        <div class="icon-area flex-1 w-full overflow-hidden bg-gray-50 flex items-center justify-center relative"
+                                {% if file.is_image %}
+                             onclick="openPreview(event, '{{ file.url }}', '{{ file.name }}')" {% endif %}>
+                            {% if file.is_image %}
+                                <img src="{{ file.url }}" loading="lazy"
+                                     class="grid-img w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                                     alt="{{ file.name }}">
+                                <div class="preview-overlay absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                                    <i class="fa-solid fa-eye text-2xl drop-shadow-md"></i></div>
+                                <i class="list-icon fa-solid fa-file-image text-purple-500 hidden"></i>
+                            {% else %}
+                                <i class="fa-solid {{ file.icon }} text-5xl opacity-80 group-hover:scale-110 transition duration-300"></i>
+                            {% endif %}
+                        </div>
+                        <div class="info-area h-12 flex items-center px-3 bg-white border-t border-gray-100 relative z-10">
+                            <div class="text-content flex-1 min-w-0">
+                                <div class="text-sm text-gray-700 font-medium truncate"
+                                     title="{{ file.name }}">{{ file.name }}</div>
+                                <div class="text-xs text-gray-400 truncate">{{ (file.size / 1024)|round(1) }} KB</div>
+                            </div>
+                            <a href="{{ url_for('download_file', bucket_name=bucket, filepath=file.path) }}"
+                               class="download-btn ml-2 text-gray-400 hover:text-blue-600 p-1.5 hover:bg-blue-50 rounded-full transition"><i
+                                    class="fa-solid fa-download"></i></a>
+                        </div>
+                    </div>
+                {% endfor %}
+
+                {% if not data.buckets and not data.folders and not data.objects %}
+                    <div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400">
+                        <i class="fa-regular fa-folder-open text-5xl mb-4 text-gray-300"></i>
+                        <p>此文件夹为空</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="image-modal"
+             class="fixed inset-0 z-[100] bg-black/90 hidden flex items-center justify-center backdrop-blur-sm transition-opacity duration-300 opacity-0"
+             onclick="closePreview()">
+            <button class="absolute top-5 right-5 text-white/70 hover:text-white text-4xl z-[110] transition">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            <div class="relative max-w-[90vw] max-h-[90vh]" onclick="event.stopPropagation()">
+                <img id="preview-img" src="" class="max-w-full max-h-[85vh] rounded shadow-2xl object-contain">
+                <div id="preview-caption" class="text-center text-white/90 mt-4 font-medium text-lg"></div>
+                <a id="preview-download" href="#"
+                   class="absolute bottom-[-40px] left-1/2 transform -translate-x-1/2 text-white/80 hover:text-white text-sm bg-white/10 px-4 py-1 rounded-full border border-white/20 hover:bg-white/20 transition">
+                    <i class="fa-solid fa-download mr-2"></i> 下载原图
+                </a>
+            </div>
+        </div>
+
+        <div id="folder-modal"
+             class="fixed inset-0 z-[100] bg-black/50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity duration-300 opacity-0">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-95"
+                 id="folder-modal-content">
+                <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                        class="fa-solid fa-folder-plus text-yellow-500 mr-2"></i>新建文件夹</h3>
+                <form action="{{ url_for('create_folder') }}" method="POST">
+                    <input type="hidden" name="bucket_name" value="{{ bucket }}">
+                    <input type="hidden" name="prefix" value="{{ prefix }}">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">文件夹名称</label>
+                        <input type="text" name="folder_name" placeholder="例如：新建文件夹" required autofocus
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    </div>
+                    <div class="flex justify-end gap-3">
+                        <button type="button" onclick="closeFolderModal()"
+                                class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">取消
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow transition">
+                            创建
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const container = document.getElementById('grid-wrapper');
+        const items = document.querySelectorAll('.file-item');
+        const btnList = document.getElementById('btn-list');
+        const btnGrid = document.getElementById('btn-grid');
+        const modal = document.getElementById('image-modal');
+        const previewImg = document.getElementById('preview-img');
+        const previewCaption = document.getElementById('preview-caption');
+        const previewDownload = document.getElementById('preview-download');
+
+        const folderModal = document.getElementById('folder-modal');
+        const folderModalContent = document.getElementById('folder-modal-content');
+
+        function openFolderModal() {
+            folderModal.classList.remove('hidden');
+            setTimeout(() => {
+                folderModal.classList.remove('opacity-0');
+                folderModalContent.classList.remove('scale-95');
+                folderModalContent.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeFolderModal() {
+            folderModal.classList.add('opacity-0');
+            folderModalContent.classList.remove('scale-100');
+            folderModalContent.classList.add('scale-95');
+            setTimeout(() => {
+                folderModal.classList.add('hidden');
+            }, 300);
+        }
+
+        folderModal.addEventListener('click', function (e) {
+            if (e.target === folderModal) {
+                closeFolderModal();
+            }
+        });
+
+        function setView(mode) {
+            localStorage.setItem('viewMode', mode);
+
+            if (mode === 'list') {
+                container.classList.remove('grid', 'grid-cols-2', 'md:grid-cols-4', 'lg:grid-cols-5', 'xl:grid-cols-6', 'gap-4');
+                container.classList.add('flex', 'flex-col', 'space-y-2');
+
+                items.forEach(item => {
+                    item.classList.remove('flex-col', 'h-48', 'justify-center', 'items-start', 'items-center', 'p-4', 'pl-6');
+                    item.classList.add('flex-row', 'items-center', 'h-14', 'px-4', 'py-0');
+
+                    const iconArea = item.querySelector('.icon-area');
+                    if (iconArea) {
+                        iconArea.classList.remove('flex-1', 'w-full', 'mb-3', 'bg-gray-50', 'justify-center', 'text-5xl', 'text-6xl');
+                        iconArea.classList.add('w-10', 'mr-4', 'flex-none', 'justify-start', 'bg-transparent', 'text-2xl', 'mb-0');
+
+                        const gridImg = iconArea.querySelector('.grid-img');
+                        const listIcon = iconArea.querySelector('.list-icon');
+                        const overlay = iconArea.querySelector('.preview-overlay');
+
+                        if (gridImg) gridImg.classList.add('hidden');
+                        if (overlay) overlay.style.display = 'none';
+                        if (listIcon) {
+                            listIcon.classList.remove('hidden');
+                            listIcon.classList.add('text-2xl');
+                        }
+                        const normalIcon = iconArea.querySelector('i:not(.list-icon)');
+                        if (normalIcon) {
+                            normalIcon.classList.remove('text-5xl', 'text-6xl');
+                            normalIcon.classList.add('text-2xl');
+                        }
+                    }
+
+                    let textArea = item.querySelector('.text-area');
+                    if (!textArea) textArea = item.querySelector('.info-area');
+                    if (textArea) {
+                        textArea.classList.remove('h-12', 'border-t', 'border-gray-100', 'px-3', 'text-center', 'absolute', 'bottom-0');
+                        textArea.classList.add('flex-1', 'border-none', 'px-0', 'h-full', 'text-left', 'flex', 'items-center');
+                    }
+                    const gridOnlyText = item.querySelector('.grid-only-text');
+                    if (gridOnlyText) gridOnlyText.classList.add('hidden');
+                });
+                btnList.classList.add('text-blue-600', 'bg-white', 'shadow-sm');
+                btnGrid.classList.remove('text-blue-600', 'bg-white', 'shadow-sm');
+            } else {
+                if (!container.classList.contains('grid')) {
+                    location.reload();
+                }
+            }
+        }
+
+        function openPreview(event, url, name) {
+            if (localStorage.getItem('viewMode') === 'list') return;
+            event.stopPropagation();
+            previewImg.src = url;
+            previewCaption.innerText = name;
+            previewDownload.href = url;
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+            }, 10);
+        }
+
+        function closePreview() {
+            modal.classList.add('opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                previewImg.src = "";
+            }, 300);
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === "Escape") {
+                if (!modal.classList.contains('hidden')) closePreview();
+                if (!folderModal.classList.contains('hidden')) closeFolderModal();
+            }
+        });
+
+        if (localStorage.getItem('viewMode') === 'list') {
+            setView('list');
+        } else {
+            btnGrid.classList.add('text-blue-600', 'bg-white', 'shadow-sm');
+        }
+    </script>
+{% endblock %}
